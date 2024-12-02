@@ -1,0 +1,37 @@
+### FF_bigdata_R_naiive
+input: Y_ls_path, F_ls_path
+generate index
+for f in file
+	for i in index:
+		extract data: Y, F, G, W, V
+		set T+1 values
+		perform 1 step forward
+		extract parameters
+		save results
+		accumulate output list names
+	end for
+	names(out) <- out_name
+	out$prior <- list(m0 = m0, M0 = M0, n0 = n0, D0 = D0)
+	return(out)
+end for 
+
+### BS_bigdata_R_naiive
+# sample from T
+Get F, V
+Get nT, DT, mT, MT
+Sample from MNIW
+# backward loop
+for i in (nT-1):0
+	get G
+	if(i == 0) 
+		backward
+		sample from MNIW
+	else 
+		backward
+		sample from MNIW
+		if(i == 1) names(out)
+end for
+
+
+
+
