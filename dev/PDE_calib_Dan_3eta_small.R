@@ -1,5 +1,5 @@
 {
-  PC <- "mac"
+  PC <- "x1c"
   switch (PC,
           "x1c" = setwd("D:/Documents/UCLA/0-Administrative/GSR/Bayesian-Modeling-Mechanistic-Systems/dev"),
           "mac" = setwd("/Users/xiangchen/Documents/Bayesian-Modeling-Mechanistic-Systems/dev"),
