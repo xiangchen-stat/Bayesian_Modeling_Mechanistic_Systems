@@ -1,17 +1,222 @@
 # set up emulation ----
-PC <- "mac"
-switch (PC,
-        "x1c" = setwd("D:/Documents/UCLA/0-Administrative/GSR/Bayesian-Modeling-Mechanistic-Systems/dev"),
-        "mac" = setwd("/Users/xiangchen/Documents/Bayesian-Modeling-Mechanistic-Systems/dev"),
-        "xps" = setwd("C:/Users/wilson/Desktop/X1C/MNIW/dev")
-)
-if(T){
-  source("emulate_EP_sigma2R.R")
+{
+# preparation----
+# need change: n_input, Nx, Ny, nsam
+library(here)
+setwd(here())
+source(here("R", "init_lib.r"))
+seed <- 1234
+set.seed(seed)
+path <- "calibration"
+path_data <- here("data", path)
+path_fig <- here("figures", path)
+if (!dir.exists(path_fig)) {
+  dir.create(path_fig)
 }
 
+
+ind_old_data <- F
+AR_choice <- 2
+nsam <- 3 * 10^4
+# nsam <- 3
+n_input <- 50
+nT <- 26
+nT_ori <- nT
+Nx <- 6
+Ny <- 6
+N_people <- 10000
+prop_train <- 0.8
+gp_tune <- 0.5
+gp_sigma2 <- 1.1
+gp_tau2 <- 10^(-4)
+N_sp <- Nx * Ny
+n_train <- round(n_input * prop_train)
+n_test <- n_input - n_train
+bnrow <- n_train #
+bnrow_test <- n_test #
+bncol <- Ny * 2 #
+pde_para <- as.matrix(read.csv(file = paste0(path_data, "/pde_para.csv", sep = "")))[1:n_input,]
+pde_para_train <- pde_para[1:n_train,]
+pde_para_test <- pde_para[(n_train + 1):n_input,]
+ind_sp <- data.frame(row = rep(1:Ny, times = Nx), col = rep(1:Nx, each = Ny))
+
+if(ind_old_data == TRUE){
+  # read old data
+  load(file.path(paste(path_data, "/dat_pde.RData", sep = "")))
+  load(file.path(paste(path_data, "/dt_pde_train.RData", sep = "")))
+  load(file.path(paste(path_data, "/dt_pde_test.RData", sep = "")))
+} else{
+  # manipulate new data
+  dat_pde <- list()
+  for (i in 1:n_input) {
+    dat_pde[[i]] <- as.matrix(read.csv(file = paste0(path_data, "/pde_solution_", i, ".csv", sep = "")))
+    if(i %% 10 == 0){
+      print(paste("read in pde_solution", i, "/", n_input))
+      print(Sys.time())
+    }
+  }
+  save(dat_pde, file = file.path(paste(path_data, "/dat_pde.RData", sep = "")))
+  
+  # transform the pde train data
+  # read in transformed train data
+  dt_pde_train <- list()
+  for (i in 1:nT) {
+    temp <- c()
+    for (j in 1:n_train) {
+      temp <- rbind(temp, dat_pde[[j]][i,])
+    }
+    dt_pde_train[[i]] <- temp
+    write.csv(temp,
+              file=file.path(path_data, paste0("pde_train_", i, ".csv", sep = "")),
+              row.names=FALSE)
+  }
+  names(dt_pde_train) <- paste0("T", seq(1:nT))
+  save(dt_pde_train, file = file.path(paste(path_data, "/dt_pde_train.RData", sep = "")))
+  
+  # transform the pde test data
+  # read in transformed test data
+  dt_pde_test <- list()
+  for (i in 1:nT) {
+    temp <- c()
+    for (j in (n_train + 1):n_input) {
+      temp <- rbind(temp, dat_pde[[j]][i,])
+    }
+    dt_pde_test[[i]] <- temp
+    write.csv(temp,
+              file=file.path(path_data, paste0("pde_test_", i, ".csv", sep = "")),
+              row.names=FALSE)
+  }
+  names(dt_pde_test) <- paste0("T", seq(1:nT))
+  save(dt_pde_test, file = file.path(paste(path_data, "/dt_pde_test.RData", sep = "")))
+}
+
+
+# Initialize para for FFBS
+# Get covariance matrix
+dist_para <- as.matrix(stats::dist(pde_para_train, method = "euclidean", diag = T, upper = T))
+phi_para <- 3 / (gp_tune * max(dist_para))
+V_para <- gen_exp_kernel(loc = pde_para_train, phi = phi_para, sigma2 = gp_sigma2, tau2 = gp_tau2) # exponential kernel
+
+ind_sp_EP <- ind_sp[1:bncol, ]
+dist_sp <- as.matrix(stats::dist(ind_sp_EP, method = "euclidean", diag = T, upper = T))
+phi_sp <- 3 / (gp_tune * max(dist_sp))
+R <- gen_gp_kernel(loc = ind_sp_EP, phi = phi_sp, sigma2 = gp_sigma2, tau2 = gp_tau2)
+# R <- sigma_sp[1:bncol, 1:bncol]
+
+# generate season-episode data
+V_para_full <- V_para #
+Y_full = dt_pde_train #
+Y_test_full <- dt_pde_test #
+
+fnrow_train <- n_train #
+fnrow_test <- n_test #
+fncol <- Nx * Ny
+N <- bnrow
+S <- bncol
+n_block <- fnrow_train / bnrow * fncol / bncol
+nT_block <- n_block * nT
+# generate index
+ind <- generate.grid.rowsnake(fnrow = fnrow_train, fncol = fncol, bnrow = bnrow, bncol = bncol)
+ind_test <- generate.grid.rowsnake(fnrow = fnrow_test, fncol = fncol, bnrow = bnrow_test, bncol = bncol)
+n_b <- n_block
+n_b_test <- dim(ind_test)[1]
+Y <- list()
+# Y_test <- list()
+# V_para <- list()
+
+# set F
+if(AR_choice == 1){
+  F_ls_train <- gen_F_ls_AR1_EP(nT = nT_ori, n_b = n_b, ind = ind, Y = Y_full)
+  F_ls_test <- gen_F_ls_AR1_EP(nT = nT_ori, n_b = n_b, ind = ind_test, Y = Y_test_full)
+  print("using AR1")
+} else if(AR_choice == 2){
+  F_ls_train <- gen_F_ls_AR2_EP(nT = nT_ori, n_b = n_b, ind = ind, Y = Y_full)
+  F_ls_test <- gen_F_ls_AR2_EP(nT = nT_ori, n_b = n_b, ind = ind_test, Y = Y_test_full)
+  print("using AR2")
+}
+
+
+# set Y
+for (i in 1:nT) {
+  temp_Y <- Y_full[[i]]
+  for (j in 1:n_b) {
+    Y[[(i-1)*n_b + j]] <- temp_Y[ind[j,2]:ind[j,3], ind[j,4]:ind[j,5]]
+  }
+}
+
+
+F_ls <- F_ls_train
+V_ls <- V_para
+N <- bnrow
+S <- bncol
+nT_ori <- nT
+nT <- nT_block
+p <- dim(F_ls[[1]])[2]
+G_ls <- diag(p)
+W_ls <- diag(p)
+n0 <- p + 3
+m0 <- matrix(1, nrow = p, ncol = S)
+M0 <- diag(p)
+D0 <- p + S #
+delta <- 1
+gc()
+}
+
+## FFBS----
 {
-source("../R/func_calibrate.R")
-source("../R/func_plot.R")
+time_start <- Sys.time()
+time_start
+para_ffbs <- FFBS_sigma2R(Y = Y, F_ls = F_ls, G_ls = G_ls,
+                          W_ls = W_ls, V_ls = V_ls,
+                          m0 = m0, M0 = M0,
+                          n0 = n0, D0 = D0,
+                          nT = nT, R = R, delta = 1.0)
+time_end <- Sys.time()
+time_end
+print(time_end - time_start)
+
+# sampling
+time_start <- Sys.time()
+time_start
+res_ffbs <- FFBS_sampling_sigma2R(nsam = nsam, para_ffbs = para_ffbs, 
+                                  F_ls = F_ls, G_ls = G_ls,
+                                  nT = nT, R = R, delta = 1)
+time_end <- Sys.time()
+time_end
+print(time_end - time_start)
+# save(res_ffbs, file = file.path(paste(path_data, "/res_ffbs_10by10_fixBSbug.RData", sep = "")))
+# load(file.path(paste(path_data, "/res_ffbs_10by10_fixBSbug.RData", sep = "")))
+
+
+# Prediction----
+input <- pde_para_train
+input_new <- pde_para_test
+n_input_new <- dim(input_new)[1]
+F_new_ls <- F_ls_test
+
+res_pre_exact_EP <- FFBS_predict_exact(Y = Y, para_ffbs = para_ffbs,
+                                       input = input, input_new = input_new,
+                                       F_ls = F_ls, F_new_ls = F_new_ls,
+                                       nT = nT, phi_para = phi_para, gp_sigma2 = gp_sigma2,
+                                       gp_tau2 = gp_tau2, delta = 1.0)
+res_pre_MC_EP <- FFBS_predict_MC(nsam = nsam, Y = Y, res_ffbs = res_ffbs,
+                                 input = input, input_new = input_new,
+                                 F_ls = F_ls, F_new_ls = F_new_ls,
+                                 nT = nT, phi_para = phi_para, gp_sigma2 = gp_sigma2,
+                                 gp_tau2 = gp_tau2, delta = 1.0)
+
+
+### transfer back ----
+# from episode season to season only
+res_pre_exact <- recover_from_EP_exact(dat_EP = res_pre_exact_EP, nT_ori = nT_ori, nT = nT)
+res_pre_MC <- recover_from_EP_MC(dat_EP = res_pre_MC_EP, nT_ori = nT_ori, nT = nT, nsam = nsam)
+}
+
+
+# calibration----
+{
+source(here("R/func_calibrate.R"))
+source(here("R/func_plot.R"))
 # inherit value from emulation
 loc_cal <- ind_sp # use the same location as emulation
 nT_cal <- nT_ori
@@ -26,25 +231,6 @@ eta_limit_high = c(4, 0.4, rep(0.2, 3))
 # eta_limit_high = c(7, 2.4, 0, 1.6, 0)
 ycal_mat <- gen_pde(eta = input_cal, Nx = Nx, Ny = Ny, N = N_people, 
                      nT_ori = nT_ori)
-
-# Compare with original generated data
-# y_emu <- c()
-# for (i in 1:length(dt_pde_test)) {
-#   y_emu <- rbind(y_emu, t(dt_pde_test[[i]][no_input_new,]))
-# }
-# y_emu2 <- dat_pde[[n_train + no_input_new]]
-# pde_para[n_train + no_input_new,]
-
-
-# Using predicted emulation data as true y
-# ycal_mat <- c()
-# ycal_ls <- list()
-# set y as time by location matrix
-# for (i in 1:length(res_pre_exact)) {
-#   ycal_mat <- rbind(ycal_mat, t(res_pre_exact[[i]][no_input_new,]))
-#   # ycal_ls[[i]] <- t(res_pre_exact[[i]][no_input_new,])
-# }
-
 
 # simulate field data z ----
 para_gen_cal <- list(n0 = 30, d0 = 2, b = 1, u0 = rep(0, N_sp_cal))
@@ -64,10 +250,10 @@ z <- df_gen$z
 tstamp <- as.integer(seq(1, nT_cal, length.out = 9))
 # max_y = max(z)
 max_y <- max(as.vector(unlist(dt_pde_test)))
-plot_heat_z <- plot_panel_heatmap_9_cal(dat = z, tstamp = tstamp, max_y = max_y,
-                                     loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_z_")
-plot_heat_u <- plot_panel_heatmap_9_cal(dat = df_gen$u, tstamp = tstamp, max_y = max_y,
-                                     loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_")
+# plot_heat_z <- plot_panel_heatmap_9_cal(dat = z, tstamp = tstamp, max_y = max_y,
+#                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_z_")
+# plot_heat_u <- plot_panel_heatmap_9_cal(dat = df_gen$u, tstamp = tstamp, max_y = max_y,
+#                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_")
 
 # split to train and test
 prop_train_cal <- 1
@@ -121,8 +307,6 @@ values_post_y <- list(t_VinvY_FTheta_ls = t_VinvY_FTheta_ls,
 
 # prior ----
 {
-# library(mcmc)
-# library(mcmcse)
 # generate prior
 prior_mcmc <- list(
                    # eta = input_cal,
@@ -139,8 +323,6 @@ prior_mcmc <- list(
                    m0 = rep(0, N_sp_train),
                    M0 = diag(N_sp_train))
 prior_mcmc$e_metrop[is.infinite(prior_mcmc$e_metrop)] <- 0
-# TODO: NOT adjust eta equaling to 0
-# prior_mcmc$e_metrop[c(3,5)] <- 0
 
 dist_sp_train <- as.matrix(stats::dist(loc_cal_train, method = "euclidean", diag = T, upper = T))
 # phi_sp_train <- 3 / (gp_tune * max(dist_sp_train))
@@ -176,21 +358,6 @@ prior_mcmc$Sigma <- y_prior$Sigma
 I_Stilde <- diag(N_sp_train)
 I_T <- diag(nT_cal)
 
-# debug
-# hist(y_prior$y)
-# hist(y_prior$mu)
-# hist(y_prior$Sigma)
-# plot_panel_heatmap_9_cal(dat = z_train, tstamp = tstamp, max_y = max_y,
-#                          loc_cal = loc_cal, Nx = Nx, Ny = Ny)
-# plot_panel_heatmap_9_cal(dat = apply(y_prior$y, c(1, 2), mean), tstamp = tstamp, max_y = max_y,
-#                          loc_cal = loc_cal, Nx = Nx, Ny = Ny)
-# plot_panel_heatmap_9_cal(dat = apply(y_prior$mu, c(1, 2), mean), tstamp = tstamp, max_y = max_y,
-#                          loc_cal = loc_cal, Nx = Nx, Ny = Ny)
-# prior_mcmc$mu <- (df_gen$z - df_gen$u) * 0.9
-# prior_mcmc$y <- prior_mcmc$mu + rnorm(n = length(prior_mcmc$mu), mean = 0, sd = tau2_0)
-# mean(res_ffbs$Sigma)
-# y_prior$sigma2_cal
-
 
 # prior_mcmc$e_metrop <- abs(0.1 * LaplacesDemon::logit(scale_uniform(input_cal, eta_limit_low, eta_limit_high)))
 n_iter <- nsam
@@ -210,7 +377,7 @@ n <- 1; i <- 1
 
 # Metropolis----
 for (n in 1:(n_burn + n_iter)) {
-  if (n %% min(1000, round((n_burn + n_iter)*0.05)) == 0) {
+  if (n %% max(min(1000, round((n_burn + n_iter)*0.05)), 1) == 0) {
     print(paste("iteration", n, "/", (n_burn + n_iter)))
     print(Sys.time())
   }
@@ -405,21 +572,6 @@ for (n in 1:(n_burn + n_iter)) {
   log_p_raw <- (loglik_y_new + loglik_z_new + log(p_new) + log_jacobian_old) -
     (loglik_y_old + loglik_z_old + log(p_old) + log_jacobian_new)
   
-  # No jacobian
-  # log_p_raw <- (loglik_y_new + loglik_z_new) - (loglik_y_old + loglik_z_old)
-  
-  # No jacobian and y
-  # log_p_raw <- (loglik_z_new) - (loglik_z_old)
-  
-  # y and jacobian
-  # log_p_raw <- (loglik_y_new + log(p_new) + log_jacobian_old) -
-  #   (loglik_y_old + log(p_old) + log_jacobian_new)
-  
-  # only y
-  # log_p_raw <- (loglik_y_new + log(p_new)) -
-  #   (loglik_y_old + log(p_old))
-  
-  
   p_raw <- exp(log_p_raw)
   p_update <- min(1, p_raw)
   
@@ -534,15 +686,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
          color = "eta") 
   
   
-  ggsave(filename = "plot_eta_trace.png",
-         path = path_fig,
-         plot = plot_eta_trace,
-         device = "png",
-         width = 30,
-         height = 20,
-         units = "cm",
-         dpi = 300
-  )
+  # ggsave(filename = "plot_eta_trace.png",
+  #        path = path_fig,
+  #        plot = plot_eta_trace,
+  #        device = "png",
+  #        width = 30,
+  #        height = 20,
+  #        units = "cm",
+  #        dpi = 300
+  # )
   
   ## eta histogram----
   {
@@ -670,26 +822,6 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
                  names_to = "tau2", 
                  values_to = "Value")
   
-  ## trace plot----
-  # plot_tau2 <- ggplot(df_tau2_long, aes(x = Iteration, y = Value, color = tau2)) +
-  #   geom_line() +
-  #   geom_hline(data = data.frame(yintercept = tau2_gen), aes(yintercept = yintercept), color = "black") +
-  #   labs(title = "MCMC tau2 Traces",
-  #        x = "Iteration",
-  #        y = "tau2 value",
-  #        color = "tau2") 
-  # 
-  # 
-  # ggsave(filename = "plot_tau2.png",
-  #        path = path_fig,
-  #        plot = plot_tau2,
-  #        device = "png",
-  #        width = 30,
-  #        height = 25,
-  #        units = "cm",
-  #        dpi = 300
-  # )
-  
   plot_tau2_panel <- ggplot(df_tau2_long, aes(x = Iteration, y = Value, color = as.factor(tau2))) +
     geom_line(alpha = 0.7) +
     geom_hline(aes(yintercept = Value), data = data.frame(tau2 = unique(df_tau2_long$tau2), Value = tau2_gen), 
@@ -701,15 +833,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
     facet_wrap(~ tau2, scales = "free_y") + 
     theme(legend.position = "none")
   
-  ggsave(filename = "plot_tau2_panel.png",
-         path = path_fig,
-         plot = plot_tau2_panel,
-         device = "png",
-         width = 40,
-         height = 30,
-         units = "cm",
-         dpi = 300
-  )
+  # ggsave(filename = "plot_tau2_panel.png",
+  #        path = path_fig,
+  #        plot = plot_tau2_panel,
+  #        device = "png",
+  #        width = 40,
+  #        height = 30,
+  #        units = "cm",
+  #        dpi = 300
+  # )
   
   ## band plot----
   plot_band_tau2 <- ggplot(perc_tau2, aes(x = time)) +
@@ -733,15 +865,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
     # scale_y_continuous(expand = expansion(mult = c(0.02, 0.02))) 
     
     
-    ggsave(filename = "plot_band_tau2.png",
-           path = path_fig,
-           plot = plot_band_tau2,
-           device = "png",
-           width = 30,
-           height = 25,
-           units = "cm",
-           dpi = 300
-    )
+    # ggsave(filename = "plot_band_tau2.png",
+    #        path = path_fig,
+    #        plot = plot_band_tau2,
+    #        device = "png",
+    #        width = 30,
+    #        height = 25,
+    #        units = "cm",
+    #        dpi = 300
+    # )
   
   # 3. Y and U----
   ## quantile heat map for y----
@@ -752,11 +884,11 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
   y_low <- gen_pde(eta = eta_lower, Nx = Nx, Ny = Ny, N = N_people, nT_ori = nT_ori)
   y_high <- gen_pde(eta = eta_upper, Nx = Nx, Ny = Ny, N = N_people, nT_ori = nT_ori)
   
-  plot_heat_y_true <- plot_panel_heatmap_9_cal_nolab(dat = y_true, tstamp = tstamp, max_y = max_y,
+  plot_heat_y_true <- plot_panel_heatmap_9_cal_nolab(dat = y_true, tstamp = tstamp, max_y = max_y, savei = F,
                                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_y_true")
-  plot_heat_y_low <- plot_panel_heatmap_9_cal_nolab(dat = y_low, tstamp = tstamp, max_y = max_y,
+  plot_heat_y_low <- plot_panel_heatmap_9_cal_nolab(dat = y_low, tstamp = tstamp, max_y = max_y, savei = F,
                                                     loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_y_low")
-  plot_heat_y_high <- plot_panel_heatmap_9_cal_nolab(dat = y_high, tstamp = tstamp, max_y = max_y,
+  plot_heat_y_high <- plot_panel_heatmap_9_cal_nolab(dat = y_high, tstamp = tstamp, max_y = max_y, savei = F,
                                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_y_high")
   
   t_heat <- c(2, 5, 8)
@@ -799,66 +931,55 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
   u_low <- apply(mcmc_u, MARGIN = c(2,3), FUN = quantile, probs = 0.025, na.rm = T)
   u_high <- apply(mcmc_u, MARGIN = c(2,3), FUN = quantile, probs = 0.975, na.rm = T)
   
-  plot_heat_u_true <- plot_panel_heatmap_9_cal_nolab(dat = u_true, tstamp = tstamp, max_y = max_y,
-                                                     loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_true")
-  plot_heat_u_low <- plot_panel_heatmap_9_cal_nolab(dat = u_low, tstamp = tstamp, max_y = max_y,
-                                                    loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_low")
-  plot_heat_u_high <- plot_panel_heatmap_9_cal_nolab(dat = u_high, tstamp = tstamp, max_y = max_y,
-                                                     loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_high")
-  
-  t_heat <- c(2, 5, 8)
-  plot_heat_u_panel <- ggarrange(
-    plot_heat_u_true[[t_heat[1]]], plot_heat_u_true[[t_heat[2]]], plot_heat_u_true[[t_heat[3]]], 
-    plot_heat_u_low[[t_heat[1]]], plot_heat_u_low[[t_heat[2]]], plot_heat_u_low[[t_heat[3]]], 
-    plot_heat_u_high[[t_heat[1]]], plot_heat_u_high[[t_heat[2]]], plot_heat_u_high[[t_heat[3]]], 
-    ncol = 3, nrow = 3,
-    labels = c(paste("True eta: t =", tstamp[t_heat[1]]-1),
-               paste("t =", tstamp[t_heat[2]]-1),
-               paste("t =", tstamp[t_heat[3]]-1),
-               paste("2.5% eta: t =", tstamp[t_heat[1]]-1),
-               paste("t =", tstamp[t_heat[2]]-1),
-               paste("t =", tstamp[t_heat[3]]-1),
-               paste("97.5% eta: t =", tstamp[t_heat[1]]-1),
-               paste("t =", tstamp[t_heat[2]]-1),
-               paste("t =", tstamp[t_heat[3]]-1)
-    ),
-    font.label = list(size = 28),
-    vjust = 1.2,
-    hjust = -0.3,
-    align = "hv",
-    common.legend = T,
-    legend = "right"
-  ) %>% annotate_figure(left = text_grob("Y", rot = 90, vjust = 1, size = 28),
-                        bottom = text_grob("X", vjust = 0, size = 28))
-  
-  ggsave(filename = "plot_heat_u_panel.png",
-         path = path_fig,
-         plot = plot_heat_u_panel,
-         device = "png",
-         width = 40,
-         height = 35,
-         units = "cm",
-         dpi = 300
-  )
+  # plot_heat_u_true <- plot_panel_heatmap_9_cal_nolab(dat = u_true, tstamp = tstamp, max_y = max_y,
+  #                                                    loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_true")
+  # plot_heat_u_low <- plot_panel_heatmap_9_cal_nolab(dat = u_low, tstamp = tstamp, max_y = max_y,
+  #                                                   loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_low")
+  # plot_heat_u_high <- plot_panel_heatmap_9_cal_nolab(dat = u_high, tstamp = tstamp, max_y = max_y,
+  #                                                    loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_high")
+  # 
+  # t_heat <- c(2, 5, 8)
+  # plot_heat_u_panel <- ggarrange(
+  #   plot_heat_u_true[[t_heat[1]]], plot_heat_u_true[[t_heat[2]]], plot_heat_u_true[[t_heat[3]]], 
+  #   plot_heat_u_low[[t_heat[1]]], plot_heat_u_low[[t_heat[2]]], plot_heat_u_low[[t_heat[3]]], 
+  #   plot_heat_u_high[[t_heat[1]]], plot_heat_u_high[[t_heat[2]]], plot_heat_u_high[[t_heat[3]]], 
+  #   ncol = 3, nrow = 3,
+  #   labels = c(paste("True eta: t =", tstamp[t_heat[1]]-1),
+  #              paste("t =", tstamp[t_heat[2]]-1),
+  #              paste("t =", tstamp[t_heat[3]]-1),
+  #              paste("2.5% eta: t =", tstamp[t_heat[1]]-1),
+  #              paste("t =", tstamp[t_heat[2]]-1),
+  #              paste("t =", tstamp[t_heat[3]]-1),
+  #              paste("97.5% eta: t =", tstamp[t_heat[1]]-1),
+  #              paste("t =", tstamp[t_heat[2]]-1),
+  #              paste("t =", tstamp[t_heat[3]]-1)
+  #   ),
+  #   font.label = list(size = 28),
+  #   vjust = 1.2,
+  #   hjust = -0.3,
+  #   align = "hv",
+  #   common.legend = T,
+  #   legend = "right"
+  # ) %>% annotate_figure(left = text_grob("Y", rot = 90, vjust = 1, size = 28),
+  #                       bottom = text_grob("X", vjust = 0, size = 28))
+  # 
+  # ggsave(filename = "plot_heat_u_panel.png",
+  #        path = path_fig,
+  #        plot = plot_heat_u_panel,
+  #        device = "png",
+  #        width = 40,
+  #        height = 35,
+  #        units = "cm",
+  #        dpi = 300
+  # )
   
   # 4. Z and U----
   ## z dif plot----
-  # for (i in 1:nsam) {
-  #   epsilon <- mniw::rmNorm(n = 1, mu = rep(0, nT_cal), Sigma = mcmc_tau2[i,] * I_T)
-  #   mcmc_z[i,,] <- mcmc_y[i,,] + mcmc_u[i,,] + epsilon
-  # }
   z_temp <- apply(mcmc_z, c(2, 3), mean, na.rm = T)
   z_mean <- z_temp[,order(ind_train_cal)] # indices are randomized, transfer back
   # dif_temp <- z[,ind_train_cal] - z_mean
   dif_temp <- z - z_mean
-  # hist(dif_temp)
-  # plot_heat_z <- plot_panel_heatmap_9_cal(dat = z, tstamp = tstamp, max_y = max_y,
-  #                                    loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_z")
-  # plot_heat_z_mean <- plot_panel_heatmap_9_cal(dat = z_mean, tstamp = tstamp, max_y = max_y,
-  #                                         loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_z_mean")
-  # plot_heat_dif <- plot_panel_heatmap_9_cal(dat = dif_temp, tstamp = tstamp, max_y = max_y,
-  #                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_dif")
-  
+
   ## scatter plot z ----
   mcmc_z_lower <- apply(mcmc_z, MARGIN = c(2, 3), FUN = quantile, probs = 0.025, na.rm = T)
   mcmc_z_med <- apply(mcmc_z, MARGIN = c(2, 3), FUN = quantile, probs = 0.5, na.rm = T)
@@ -886,15 +1007,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
   # plot_scatter_z
   
   # ggsave(filename = paste("plot_error_", as.numeric(Sys.time()), ".png", sep = ""),
-  ggsave(filename = paste("plot_error_z.png", sep = ""),
-         path = path_fig,
-         plot = plot_scatter_z,
-         device = "png",
-         width = 30,
-         height = 25,
-         units = "cm",
-         dpi = 300
-  ) 
+  # ggsave(filename = paste("plot_error_z.png", sep = ""),
+  #        path = path_fig,
+  #        plot = plot_scatter_z,
+  #        device = "png",
+  #        width = 30,
+  #        height = 25,
+  #        units = "cm",
+  #        dpi = 300
+  # ) 
   
   
   ## scatter u----
@@ -922,15 +1043,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
     labs(x = "True spatial bias", y = "Posterior prediction")
   
   # ggsave(filename = paste("plot_error_", as.numeric(Sys.time()), ".png", sep = ""),
-  ggsave(filename = paste("plot_error_u.png", sep = ""),
-         path = path_fig,
-         plot = plot_scatter_u,
-         device = "png",
-         width = 30,
-         height = 25,
-         units = "cm",
-         dpi = 300
-  ) 
+  # ggsave(filename = paste("plot_error_u.png", sep = ""),
+  #        path = path_fig,
+  #        plot = plot_scatter_u,
+  #        device = "png",
+  #        width = 30,
+  #        height = 25,
+  #        units = "cm",
+  #        dpi = 300
+  # ) 
   
   
   ## band plot z ----
@@ -944,15 +1065,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
          y = "Posterior prediction"
          )
   
-  ggsave(filename = paste("plot_band_predict_z.png", sep = ""),
-         path = path_fig,
-         plot = plot_band_predict_z,
-         device = "png",
-         width = 25,
-         height = 25,
-         units = "cm",
-         dpi = 300
-  ) 
+  # ggsave(filename = paste("plot_band_predict_z.png", sep = ""),
+  #        path = path_fig,
+  #        plot = plot_band_predict_z,
+  #        device = "png",
+  #        width = 25,
+  #        height = 25,
+  #        units = "cm",
+  #        dpi = 300
+  # ) 
   
   ## band plot u----
   plot_band_predict_u <- df_stat_u %>%
@@ -965,15 +1086,15 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
          y = "Posterior prediction"
          )
   
-  ggsave(filename = paste("plot_band_predict_u.png", sep = ""),
-         path = path_fig,
-         plot = plot_band_predict_u,
-         device = "png",
-         width = 25,
-         height = 25,
-         units = "cm",
-         dpi = 300
-  ) 
+  # ggsave(filename = paste("plot_band_predict_u.png", sep = ""),
+  #        path = path_fig,
+  #        plot = plot_band_predict_u,
+  #        device = "png",
+  #        width = 25,
+  #        height = 25,
+  #        units = "cm",
+  #        dpi = 300
+  # ) 
   
   # 5. panel TAU2 U Z----
   plot_panel_tau_u_z <- ggarrange(
@@ -1020,45 +1141,3 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
 }
 
 
-# # y
-# # plot heat map of z
-# dat <- z
-# tstamp <- as.integer(seq(1, nT_cal, length.out = 9))
-# # max_y = max(z)
-# max_y <- max(as.vector(unlist(dt_pde_test)))
-# cal_heat <- plot_panel_heatmap_9_cal(dat = z, tstamp = tstamp, max_y = max_y,
-#                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny)
-
-
-
-
-
-
-
-# plot(x = 1:n_iter, y = mcmc_eta[1:n_iter,1])
-# plot(x = 1:n_iter, y = mcmc_eta[1:n_iter,2])
-# plot(x = 1:n_iter, y = mcmc_eta[1:n_iter,3])
-# plot(x = 1:n_iter, y = mcmc_eta[1:n_iter,4])
-# plot(x = 1:n_iter, y = mcmc_eta[1:n_iter,5])
-# hist(mcmc_eta[,n_iter,5])
-# res1 <- mcmc_eta
-# save(mcmc_eta, file = paste(path_data, "/mcmc_eta_50.RData", sep = ""))
-
-# F_eta_Theta_train <- list()
-# for (i in 1:length(F_eta_Theta)) {
-#   F_eta_Theta_train[[i]] <- F_eta_Theta[[i]][,ind_train_cal,] # TODO 
-# }
-
-
-# try to adapt from emulation prediction function
-# res_pre_MC_EP <- FFBS_predict_MC(nsam = nsam, Y = Y, res_ffbs = res_ffbs,
-#                                  input = input, input_new = input_new[1,],
-#                                  F_ls = F_ls, F_new_ls = F_new_ls,
-#                                  nT = nT, gp_tune = gp_tune, gp_sigma2 = gp_sigma2,
-#                                  gp_tau2 = gp_tau2, delta = 1.0)
-# temp <- F_new_ls
-# Ftt <- list()
-# for (i in 1:nT) {
-#   Ftt[[i]] <- t(F_new_ls[[i]][1,])
-# }
-# F_new_ls <- Ftt
