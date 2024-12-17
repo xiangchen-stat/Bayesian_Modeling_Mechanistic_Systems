@@ -15,4 +15,8 @@ To reproduce the results from the application section of the paper, begin by ins
 
 ### Dependencies
 
-Make sure that all the required libraries used in the vignettes are installed. You will be able to run the vignettes without modifying it.
+Make sure that all the required libraries used in the vignettes are installed by running `Rscript install_dependencies.R`. The libraries to use are specified in R/init_lib.R. You will be able to run the vignettes without modifying it.
+
+### Run vignettes
+
+To reproduce the results from the application section of the paper, go to the subdirectories within the `vignettes` folder. Each subdirectory contains a script that generates all the results for the corresponding section of the paper. The output will be saved in the `figures` directory.
