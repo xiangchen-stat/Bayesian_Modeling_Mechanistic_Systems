@@ -1,0 +1,11 @@
+install.packages("mniw")
+install.packages("LaplacesDemon") # dmatrixnorm(")
+install.packages("matrixsampling") # rinvwishart(")
+install.packages("matrixcalc") # is.positive.definite(")
+install.packages("invgamma") # rinvgamma
+install.packages("matrixStats") # logSumExp(")
+install.packages("loo")
+# install.packages("microbenchmark")
+install.packages("Rcpp")
+install.packages("here")
+install.packages("tidyverse")
