@@ -159,7 +159,7 @@ D0 <- diag(S)
 delta <- 1
 gc()
 }
-
+# print("emulation succeed")
 ## FFBS----
 {
 time_start <- Sys.time()

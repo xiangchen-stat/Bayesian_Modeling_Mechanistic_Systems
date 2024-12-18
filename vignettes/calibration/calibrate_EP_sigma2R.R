@@ -161,7 +161,7 @@ D0 <- p + S #
 delta <- 1
 gc()
 }
-
+# print("calibration succeed")
 ## FFBS----
 {
 time_start <- Sys.time()
