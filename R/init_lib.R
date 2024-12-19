@@ -6,7 +6,7 @@ required_packages <- c(
 
 # Function to install and load packages if not already installed
 install_and_load <- function(pkg) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
+  if (!library(pkg, logical.return = T)) {
     install.packages(pkg, dependencies = TRUE)
   }
   library(pkg, character.only = TRUE)
