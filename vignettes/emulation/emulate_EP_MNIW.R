@@ -2,10 +2,8 @@
 {
 # preparation----
 # need change: n_input, Nx, Ny, nsam
-if (!library("here", logical.return = T)) {
-  install.packages("here", dependencies = TRUE)
-  library("here", character.only = TRUE)
-}
+install.packages("here")
+library(here)
 setwd(here())
 source(here("R", "init_lib.r"))
 seed <- 1234
