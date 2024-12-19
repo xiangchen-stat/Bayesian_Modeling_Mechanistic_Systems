@@ -13,8 +13,8 @@ The repository is organized as follows:
 
 ### Dependencies
 
-Make sure that all the required libraries used in the vignettes are installed. Most of libraries are specified in `R/init_lib.R`.
+Make sure that all the required libraries used in the vignettes are installed by running `Rscript install_dependencies.R`. You will be able to run the vignettes without modifying it.
 
 ### Run vignettes
 
-To reproduce the results from the application section of the paper, go to the subdirectories within the `vignettes` folder. Each subdirectory contains a script that generates all the results for the corresponding section of the paper. The output will be saved in the `figures` directory.
+To reproduce the results from the application section of the paper, go to the subdirectories within the `vignettes` folder. Each subdirectory contains a script that generates all the results for the corresponding section of the paper, whether via `Rscript [vignette_file.R]` or opening the R shell and running `source("[vignette_file.R]")`, where [vignette_file.R] is substituted for the appropriate vignette file. (e.g. vignettes/emulation/emulate_EP_MNIW.R for emulation plots.) The output will be saved in the `figures` directory.

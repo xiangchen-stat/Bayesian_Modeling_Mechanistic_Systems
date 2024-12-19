@@ -2,7 +2,7 @@
 {
 # preparation----
 # need change: n_input, Nx, Ny, nsam
-install.packages("here")
+#install.packages("here")
 library(here)
 setwd(here())
 source(here("R", "init_lib.r"))

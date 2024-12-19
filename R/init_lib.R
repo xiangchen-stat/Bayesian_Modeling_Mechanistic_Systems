@@ -15,6 +15,7 @@
 # for(pkg in required_packages){
 #   install_and_load(pkg)
 # }
+if (FALSE) {
 install.packages("mniw")
 install.packages("LaplacesDemon") # dmatrixnorm(")
 install.packages("matrixsampling") # rinvwishart(")
@@ -25,6 +26,7 @@ install.packages("loo")
 install.packages("Rcpp")
 install.packages("here")
 install.packages("tidyverse")
+}
 
 library(mniw)
 library(LaplacesDemon) # dmatrixnorm()
