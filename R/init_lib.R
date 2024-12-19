@@ -6,15 +6,15 @@ required_packages <- c(
 
 # Function to install and load packages if not already installed
 install_and_load <- function(pkg) {
-  if (!library(pkg, logical.return = T)) {
-    install.packages(pkg, dependencies = TRUE)
+  if (!require(pkg, character.only = T)) {
+    install.packages(pkg)
   }
   library(pkg, character.only = TRUE)
 }
 
-# Install and load the required packages
-lapply(required_packages, install_and_load)
-
+for(pkg in required_packages){
+  install_and_load(pkg)
+}
 # library(mniw)
 # library(LaplacesDemon) # dmatrixnorm()
 # library(matrixsampling) # rinvwishart()
