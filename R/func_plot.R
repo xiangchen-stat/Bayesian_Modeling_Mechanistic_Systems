@@ -22,6 +22,7 @@ quick_heat <- function(dt, max_y){
           legend.key.size = unit(1.5, "cm"))
   return(p)
 }
+
 quick_save <- function(filename, path_fig, plot){
   ggsave(filename = paste(filename, "_", as.numeric(Sys.time()), ".png", sep = ""),
          path = path_fig,
@@ -36,16 +37,16 @@ quick_save <- function(filename, path_fig, plot){
 
 # Emulation ----
 # plot heatmap as a 3x3 panel
-plot_panel_heatmap_9 <- function(dat, input_num, tstamp, max_y, Nx, Ny, nT){
+plot_panel_heatmap_9 <- function(dat, input_num, tstamp, max_y, Nx, Ny, nT, filename = "plot_panel", savei = T){
   plot_ls <- list()
   # tstamp <- as.integer(seq(1, nT, length.out = 10))
   ind_sp <- data.frame(row = rep(1:Ny, times = Nx), col = rep(1:Nx, each = Ny))
   ind_plot <- 1
   
   for (i in tstamp) {
-    if(i == 1){
-      ind_plot <- 1 # start counting
-    }
+    # if(i == 1 && ind_plot == 1){
+    #   ind_plot <- 1 # start counting
+    # }
     temp <- dat[[i]][input_num,]
     rownames(temp) <- NULL
     colnames(temp) <- NULL
@@ -67,35 +68,37 @@ plot_panel_heatmap_9 <- function(dat, input_num, tstamp, max_y, Nx, Ny, nT){
     plot_ls[[ind_plot]] <- p
     ind_plot <- ind_plot + 1
   }
-  ggsave(filename = paste("plot_panel_", as.numeric(Sys.time()), ".png", sep = ""),
-         path = path_fig,
-         plot = ggarrange(plot_ls[[1]], plot_ls[[2]], plot_ls[[3]],
-                          plot_ls[[4]], plot_ls[[5]], plot_ls[[6]],
-                          plot_ls[[7]], plot_ls[[8]], plot_ls[[9]],
-                          ncol = 3, nrow = 3,
-                          labels = c(paste("PDE: t =", tstamp[1]-1),
-                                     paste("PDE: t =", tstamp[2]-1), 
-                                     paste("PDE: t =", tstamp[3]-1), 
-                                     paste("PDE: t =", tstamp[4]-1),
-                                     paste("PDE: t =", tstamp[5]-1), 
-                                     paste("PDE: t =", tstamp[6]-1), 
-                                     paste("PDE: t =", tstamp[7]-1),
-                                     paste("PDE: t =", tstamp[8]-1), 
-                                     paste("PDE: t =", tstamp[9]-1)),
-                          font.label = list(size = 28),
-                          vjust = 1.2,
-                          # hjust = -1,
-                          align = "hv",
-                          common.legend = T,
-                          legend = "right"
-                          
-         ),
-         device = "png",
-         width = 60,
-         height = 50,
-         units = "cm",
-         dpi = 100
-  )
+  if(savei){
+    ggsave(filename = paste(filename, ".png", sep = ""),
+           path = path_fig,
+           plot = ggarrange(plot_ls[[1]], plot_ls[[2]], plot_ls[[3]],
+                            plot_ls[[4]], plot_ls[[5]], plot_ls[[6]],
+                            plot_ls[[7]], plot_ls[[8]], plot_ls[[9]],
+                            ncol = 3, nrow = 3,
+                            labels = c(paste("PDE: t =", tstamp[1]-1),
+                                       paste("PDE: t =", tstamp[2]-1), 
+                                       paste("PDE: t =", tstamp[3]-1), 
+                                       paste("PDE: t =", tstamp[4]-1),
+                                       paste("PDE: t =", tstamp[5]-1), 
+                                       paste("PDE: t =", tstamp[6]-1), 
+                                       paste("PDE: t =", tstamp[7]-1),
+                                       paste("PDE: t =", tstamp[8]-1), 
+                                       paste("PDE: t =", tstamp[9]-1)),
+                            font.label = list(size = 28),
+                            vjust = 1.2,
+                            # hjust = -1,
+                            align = "hv",
+                            common.legend = T,
+                            legend = "right"
+                            
+           ),
+           device = "png",
+           width = 60,
+           height = 50,
+           units = "cm",
+           dpi = 100
+    )
+  }
   return(plot_ls)
 }
 
@@ -117,7 +120,7 @@ cal_errorbar_mean <- function(X){
 
 # calibration ----
 # plot heatmap as a 3x3 panel
-plot_panel_heatmap_9_cal <- function(dat, tstamp, max_y, loc_cal, Nx, Ny){
+plot_panel_heatmap_9_cal <- function(dat, tstamp, max_y, loc_cal, Nx, Ny, filename = "plot_panel", savei = T){
   plot_ls <- list()
   ind_plot <- 1 # start counting
   
@@ -143,34 +146,102 @@ plot_panel_heatmap_9_cal <- function(dat, tstamp, max_y, loc_cal, Nx, Ny){
     plot_ls[[ind_plot]] <- p
     ind_plot <- ind_plot + 1
   }
-  ggsave(filename = paste("plot_panel_cal_", as.numeric(Sys.time()), ".png", sep = ""),
-         path = path_fig,
-         plot = ggarrange(plot_ls[[1]], plot_ls[[2]], plot_ls[[3]],
-                          plot_ls[[4]], plot_ls[[5]], plot_ls[[6]],
-                          plot_ls[[7]], plot_ls[[8]], plot_ls[[9]],
-                          ncol = 3, nrow = 3,
-                          labels = c(paste("PDE: t =", tstamp[1]-1),
-                                     paste("PDE: t =", tstamp[2]-1), 
-                                     paste("PDE: t =", tstamp[3]-1), 
-                                     paste("PDE: t =", tstamp[4]-1),
-                                     paste("PDE: t =", tstamp[5]-1), 
-                                     paste("PDE: t =", tstamp[6]-1), 
-                                     paste("PDE: t =", tstamp[7]-1),
-                                     paste("PDE: t =", tstamp[8]-1), 
-                                     paste("PDE: t =", tstamp[9]-1)),
-                          font.label = list(size = 28),
-                          vjust = 1.2,
-                          # hjust = -1,
-                          align = "hv",
-                          common.legend = T,
-                          legend = "right"
-                          
-         ),
-         device = "png",
-         width = 60,
-         height = 50,
-         units = "cm",
-         dpi = 100
-  )
+  
+  if(savei){
+    # ggsave(filename = paste(filename, ".png", sep = ""),
+    ggsave(filename = paste(filename, ".png", sep = ""),
+           path = path_fig,
+           plot = ggarrange(plot_ls[[1]], plot_ls[[2]], plot_ls[[3]],
+                            plot_ls[[4]], plot_ls[[5]], plot_ls[[6]],
+                            plot_ls[[7]], plot_ls[[8]], plot_ls[[9]],
+                            ncol = 3, nrow = 3,
+                            labels = c(paste("t =", tstamp[1]-1),
+                                       paste("t =", tstamp[2]-1), 
+                                       paste("t =", tstamp[3]-1), 
+                                       paste("t =", tstamp[4]-1),
+                                       paste("t =", tstamp[5]-1), 
+                                       paste("t =", tstamp[6]-1), 
+                                       paste("t =", tstamp[7]-1),
+                                       paste("t =", tstamp[8]-1), 
+                                       paste("t =", tstamp[9]-1)),
+                            font.label = list(size = 28),
+                            vjust = 1.2,
+                            # hjust = -1,
+                            align = "hv",
+                            common.legend = T,
+                            legend = "right"
+                            
+           ),
+           device = "png",
+           width = 60,
+           height = 50,
+           units = "cm",
+           dpi = 100
+    )
+  }
+  
+  return(plot_ls)
+}
+
+plot_panel_heatmap_9_cal_nolab <- function(dat, tstamp, min_y = 0, max_y, loc_cal, Nx, Ny, filename = "plot_panel", savei = T){
+  plot_ls <- list()
+  ind_plot <- 1 # start counting
+  
+  for (i in tstamp) {
+    temp <- dat[i,]
+    rownames(temp) <- NULL
+    colnames(temp) <- NULL
+    dt <- data.frame(row = loc_cal$row, col = loc_cal$col, sol = temp)%>% 
+      as.data.frame()
+    
+    p <- ggplot(dt, aes(x = col, y = row, fill = sol)) +
+      geom_raster() +
+      scale_fill_gradientn(colours = col_bgr,
+                           limits = c(min_y, max_y),
+                           oob = scales::squish) +
+      labs(x = NULL, y = NULL, fill = "Value")+
+      # scale_x_continuous(limits = c(-123.8, -114.2), expand = c(0, 0)) +
+      # scale_y_continuous(limits = c(32.15, 42.04), expand = c(0, 0)) +
+      theme(text = element_text(size=28),
+            legend.text = element_text(size = 28),
+            legend.key.size = unit(1.5, "cm"))
+    
+    plot_ls[[ind_plot]] <- p
+    ind_plot <- ind_plot + 1
+  }
+  
+  if(savei){
+    # ggsave(filename = paste(filename, ".png", sep = ""),
+    ggsave(filename = paste(filename, ".png", sep = ""),
+           path = path_fig,
+           plot = ggarrange(plot_ls[[1]], plot_ls[[2]], plot_ls[[3]],
+                            plot_ls[[4]], plot_ls[[5]], plot_ls[[6]],
+                            plot_ls[[7]], plot_ls[[8]], plot_ls[[9]],
+                            ncol = 3, nrow = 3,
+                            labels = c(paste("t =", tstamp[1]-1),
+                                       paste("t =", tstamp[2]-1),
+                                       paste("t =", tstamp[3]-1),
+                                       paste("t =", tstamp[4]-1),
+                                       paste("t =", tstamp[5]-1),
+                                       paste("t =", tstamp[6]-1),
+                                       paste("t =", tstamp[7]-1),
+                                       paste("t =", tstamp[8]-1),
+                                       paste("t =", tstamp[9]-1)),
+                            font.label = list(size = 28),
+                            vjust = 1.2,
+                            # hjust = -1,
+                            align = "hv",
+                            common.legend = T,
+                            legend = "right"
+                            
+           ),
+           device = "png",
+           width = 60,
+           height = 50,
+           units = "cm",
+           dpi = 100
+    )
+  }
+  
   return(plot_ls)
 }
