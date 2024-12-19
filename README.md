@@ -13,8 +13,8 @@ The repository is organized as follows:
 
 ### Dependencies
 
-Make sure that all the required libraries used in the vignettes are installed. You will be able to run the vignettes without modifying it.
+Make sure that all the required libraries used in the vignettes are installed. Most of libraries are specified in `R/init_lib.R`.
 
 ### Run vignettes
 
-To reproduce the results from the application section of the paper, run `./run.sh` in command line. The output will be saved in the `figures/` directory.
+To reproduce the results from the application section of the paper, go to the subdirectories within the `vignettes` folder. Each subdirectory contains a script that generates all the results for the corresponding section of the paper. The output will be saved in the `figures` directory.
