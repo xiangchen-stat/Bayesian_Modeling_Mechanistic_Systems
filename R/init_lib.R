@@ -15,6 +15,17 @@
 # for(pkg in required_packages){
 #   install_and_load(pkg)
 # }
+install.packages("mniw")
+install.packages("LaplacesDemon") # dmatrixnorm(")
+install.packages("matrixsampling") # rinvwishart(")
+install.packages("matrixcalc") # is.positive.definite(")
+install.packages("invgamma") # rinvgamma
+install.packages("matrixStats") # logSumExp(")
+install.packages("loo")
+install.packages("Rcpp")
+install.packages("here")
+install.packages("tidyverse")
+
 library(mniw)
 library(LaplacesDemon) # dmatrixnorm()
 library(matrixsampling) # rinvwishart()
