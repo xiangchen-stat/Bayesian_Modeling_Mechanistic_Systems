@@ -2,7 +2,10 @@
 {
 # preparation----
 # need change: n_input, Nx, Ny, nsam
-library(here)
+if (!library("here", logical.return = T)) {
+  install.packages("here", dependencies = TRUE)
+  library("here", character.only = TRUE)
+}
 setwd(here())
 source(here("R", "init_lib.r"))
 seed <- 1234
@@ -13,7 +16,6 @@ path_fig <- here("figures", path)
 if (!dir.exists(path_fig)) {
   dir.create(path_fig)
 }
-
 
 ind_old_data <- F
 AR_choice <- 2
