@@ -2,7 +2,6 @@
 {
 # preparation----
 # need change: n_input, Nx, Ny, nsam
-install.packages("here")
 library(here)
 setwd(here())
 source(here("R", "init_lib.r"))
@@ -307,6 +306,7 @@ values_post_y <- list(t_VinvY_FTheta_ls = t_VinvY_FTheta_ls,
 
 # prior ----
 {
+set.seed(12345678)
 # generate prior
 prior_mcmc <- list(
                    # eta = input_cal,
@@ -319,7 +319,7 @@ prior_mcmc <- list(
                    d0 = para_gen_cal$d0,
                    b = para_gen_cal$b,
                    # e_metrop = 0.5 * abs(LaplacesDemon::logit(scale_uniform(input_cal, eta_limit_low, eta_limit_high))),
-                   e_metrop = 0.1 * abs(eta_limit_high - eta_limit_low),
+                   e_metrop = 0.15 * abs(eta_limit_high - eta_limit_low),
                    m0 = rep(0, N_sp_train),
                    M0 = diag(N_sp_train))
 prior_mcmc$e_metrop[is.infinite(prior_mcmc$e_metrop)] <- 0
@@ -1138,6 +1138,7 @@ mean((mcmc_temp[,5] - mcmc_temp[,6])>0)
   
   print(paste("Coverage eta:", cover_eta))
   print(paste("Coverage tau2:", cover_tau2))
+  # print(plot_eta_trace)
 }
 
 
