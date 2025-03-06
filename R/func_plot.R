@@ -102,6 +102,51 @@ plot_panel_heatmap_9 <- function(dat, input_num, tstamp, max_y, Nx, Ny, nT, file
   return(plot_ls)
 }
 
+# plot_panel_heatmap_51 <- function(dat, input_num, tstamp, max_y, Nx, Ny, nT, filename = "plot_panel", savei = T){
+#   plot_ls <- list()
+#   tstamp <- as.integer(seq(1, nT))
+#   ind_sp <- data.frame(row = rep(1:Ny, times = Nx), col = rep(1:Nx, each = Ny))
+#   ind_plot <- 1
+#   
+#   for (i in tstamp) {
+#     # if(i == 1 && ind_plot == 1){
+#     #   ind_plot <- 1 # start counting
+#     # }
+#     temp <- dat[[i]][input_num,]
+#     rownames(temp) <- NULL
+#     colnames(temp) <- NULL
+#     dt <- data.frame(row = ind_sp$row, col = ind_sp$col, sol = temp)%>% 
+#       as.data.frame()
+#     
+#     p <- ggplot(dt, aes(x = col, y = row, fill = sol)) +
+#       geom_raster() +
+#       scale_fill_gradientn(colours = col_bgr,
+#                            limits = c(0, max_y),
+#                            oob = scales::squish) +
+#       labs(x = "x", y = "y", fill = "Value")+
+#       # scale_x_continuous(limits = c(-123.8, -114.2), expand = c(0, 0)) +
+#       # scale_y_continuous(limits = c(32.15, 42.04), expand = c(0, 0)) +
+#       theme(text = element_text(size=28),
+#             legend.text = element_text(size = 28),
+#             legend.key.size = unit(1.5, "cm"))
+#     
+#     plot_ls[[ind_plot]] <- p
+#     if(savei){
+#       ggsave(filename = paste(filename, ind_plot, ".png", sep = ""),
+#              path = path_fig,
+#              plot = p,
+#              device = "png",
+#              width = 60,
+#              height = 50,
+#              units = "cm",
+#              dpi = 100
+#       )
+#     }
+#     ind_plot <- ind_plot + 1
+#   }
+#   return(plot_ls)
+# }
+
 
 cal_errorbar <- function(X){
   out <- data.frame(med = apply(X = X, MARGIN = 1, FUN = median),

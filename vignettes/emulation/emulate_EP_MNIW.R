@@ -230,7 +230,17 @@ source(here("R", "func_plot.R"))
   # max_y <- max(as.vector(unlist(res_pre_exact))) # set max limit for all plots
   
   pde_heat <- plot_panel_heatmap_9(dat = dat, tstamp = tstamp, filename = "plot_panel_pde",
-                                   input_num = input_num, max_y = max_y, Nx = Nx, Ny = Ny, nT = nT)
+                                   input_num = input_num, max_y = max_y, Nx = Nx, Ny = Ny, nT = nT_ori)
+  # pde_heat51 <- plot_panel_heatmap_51(dat = dat, tstamp = tstamp, filename = "plot_panel_pde",
+  #                                  input_num = input_num, max_y = max_y, Nx = Nx, Ny = Ny, nT = nT_ori)
+  # # gif
+  # library(gifski)
+  # png_file <- paste("plot_panel_pde", 1:66, ".png", sep = "")
+  # png_path <- here(path_fig, "gif", png_file)
+  # dur <- 7
+  # n_png <- length(png_file)
+  # gifski(png_files = png_path, gif_file = here(path_fig, "heatwave.gif"),
+  #        delay = dur/n_png, width = 3600, height = 2400)
   
   # dat <- postm_ls # this is monte carlo
   dat <- res_pre_exact # this is exact
