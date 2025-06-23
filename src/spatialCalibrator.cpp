@@ -341,7 +341,6 @@ Rcpp::List spSSGP(const mat& z, const mat& y,  const cube& y_cube, const vec yin
       std::cout << "95%" << std::endl;
     }
     start = high_resolution_clock::now();
-    // NOTE: This is where the Forward Filter takes place
     kalman(y, m0, C0, FF, K, W, a, R, m, C, 
            alpha, beta, alpha0, beta0, delta_w, delta_v);
     stop = high_resolution_clock::now();

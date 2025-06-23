@@ -1,18 +1,33 @@
-library(spreadr)
-library(ggraph)
-library(ggplot2)
-library(igraph)
-library(gifski)
+# lib----
+{
+  library(here)
+  setwd(here())
+  library(Rcpp)
+  library(RcppArmadillo)
+  library(RcppThread)
+  library(spreadr)
+  library(ggraph)
+  library(ggplot2)
+  library(igraph)
+  library(gifski)
+  sourceCpp(here("src", "parallel_mvcalibratorDiscrepancy.cpp"))
+  cut.at.n.tile <- function(X , n = 4){ 
+    cut( X , breaks = quantile( X , 
+                                probs = (0:n)/n , na.rm = TRUE ) ,
+         labels = 1:n,
+         include.lowest = TRUE )}
+  RMSE <- function(a, b){
+    return(sqrt(mean((a-b)^2)))
+  }
+}
 
-library(MLmetrics)
-library(Rcpp)
-sourceCpp("../cpp models/parallel_mvcalibratorDiscrepancy.cpp")
+# PDE----
+{
+  source(here("R", "demo.R"))
+}
 
-cut.at.n.tile <- function(X , n = 4){ 
-  cut( X , breaks = quantile( X , 
-                              probs = (0:n)/n , na.rm = TRUE ) ,
-       labels = 1:n,
-       include.lowest = TRUE )}
+# hetero----
+{
 data("pnet")  # load and inspect the igraph object
 plot(pnet)
 start_run <- data.frame(
@@ -193,6 +208,8 @@ z = matrix(rnorm(nrow(z)*ncol(z),0,sigma_z),nrow(z),ncol(z)) + z
 matplot(z,type="l")
 st_time = Sys.time();
 p2=1
+print("start")
+print(Sys.time())
 spgasp = parallel_mvcalibrator_discrepancy(z = z[-1,], 
                            y = ysp2[,-1,], 
                            niter = 5000, burnin = 5000/2,
@@ -212,6 +229,8 @@ spgasp = parallel_mvcalibrator_discrepancy(z = z[-1,],
                            delta_v = .9,
                            a0z = 1, b0z = 1, sptune=.5,
                            discrep = 0, sigma_z = .1);
+print(Sys.time())
+print("end")
 zrep = spgasp$mc_yeta
 for(i in 1:ncol(spgasp$mc_sigma2)){
   zrep[,i,] = spgasp$mc_yeta[,i,] + spgasp$mc_sigma2[i]
@@ -220,9 +239,14 @@ mu=(apply(zrep,c(1,3),mean))
 sd = (apply(zrep,c(1,3),sd))
 # matplot(mu,type="l")
 # matplot(z,type="l")
-RMSE(z[-1,], mu)
+print(RMSE(z[-1,], mu))
 (GRS = -sum((z[-1,]-mu)^2)-2*sum(log(sd)))
-# # 
+}
+
+
+# spatial---- 
+{
+source(here("R", "spatial.R"))
 zrep = fullySpatial$yeta
 for(i in 1:ncol(fullySpatial$mc_sigma2)){
   zrep[,i,] = fullySpatial$yeta[,i,] + fullySpatial$mc_sigma2[i]
@@ -231,9 +255,14 @@ mu=(apply(zrep,c(1,3),mean))
 sd = (apply(zrep,c(1,3),sd))
 # matplot(mu,type="l")
 # matplot(z,type="l")
-RMSE(z[-1,], mu)
+print(RMSE(z[-1,], mu))
 (GRS = -sum((z[-1,]-mu)^2)-2*sum(log(sd)))
-# # 
+}
+
+
+# # non-spatial ----
+if(F){
+source(here("R", "nonspatial.R"))
 zrep = nonspatial$yeta
 for(i in 1:ncol(nonspatial$mc_sigma2)){
   zrep[,i,] = nonspatial$yeta[,i,] + nonspatial$mc_sigma2[i]
@@ -264,6 +293,10 @@ matplot(spgasp$calibrate,type="l",ylim=c(0,1))
 # apply(spgasp$calibrate,2,quantile)
 test
 round(colMeans(spgasp$calibrate),3)
+}
+
+
+# plot 1----
 {
   library(latex2exp)
   par(mfrow=c(2,2))
@@ -314,6 +347,9 @@ round(colMeans(spgasp$calibrate),3)
                 rgb(1, 0, 0, alpha=.7)),
          bty = 'n',text.font=2,cex=1.5)
 }
+
+# plot 2----
+{
 # points(rbind(test[1:2]),pch=19,cex=2,col="red")
 # theta_loc = 7
 # (test=theta_design[theta_loc,] + runif(4,0,0.05))
@@ -336,3 +372,4 @@ result <- spreadr(pnet, start_run, time = t_max,
 # ggplot(result, aes(x=time, y=activation, color=node)) +
 #   geom_point() +
 #   geom_line()
+}

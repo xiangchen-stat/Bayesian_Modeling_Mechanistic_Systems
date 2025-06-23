@@ -1,26 +1,3 @@
-library(Rcpp)
-sourceCpp("../cpp models/parallel_mvcalibratorDiscrepancy.cpp")
-
-# initialize graph
-N = 20
-network_orig=network <- make_tree(N, children = 2,mode = "undirected")
-plot(network)
-l = layout_nicely(network)
-mat=as_adjacency_matrix(network)
-act = sample(c(1:10),size = N,replace = T)
-act = rep(0,N)
-act[1] = 10
-initial_df <- data.frame(node=c(1,2:(N)), activation=act, stringsAsFactors=FALSE)
-a = .01; b = .05; c = 0
-results <- spreadr(mat, initial_df, include_t0 = T,
-                   decay = a, retention = b, suppress = c)
-results$activation=(results$activation+0)
-dat = (reshape(results, idvar = "node", timevar = "time", direction = "wide")[,-1])
-
-S = nrow(dat)
-t_max = 10
-times = (0:t_max)
-
 FF = array(0, dim=c(S*sims, S, length(times)-1))
 for(i in 1:dim(FF)[3]){
   l <- split(FF1[,,i], rep(1:ncol(FF1[,,i]), each=nrow(FF1[,,i])))
@@ -46,23 +23,36 @@ calcSigma <- function(X,l) {
 st_time = Sys.time();
 X = as.matrix(expand.grid(Gridx$x.mid,Gridx$x.mid)[locs,], ncol=2)
 W=(.4*as.matrix(mat)+diag(S))
-heatmap(W,Rowv = NA,Colv = NA)
-fullySpatial = spDLMGP(z=t(z)[,-1], y=yin[,-1],
-                 yy = array(ysp2[,-1,],
-                            dim=c(nrow(ysp2),ncol(ysp2)-1,dim(ysp2)[3])),
-                 FF=FF, FFc=FFsp,
-                 m0=matrix(rep(0,S)), 
-                 C0=W, W=W,
-                 yinit = ysp2[1,1,], alpha0=.1, beta0=.1,
-                 delta_v=.9, delta_w=.9,
-                 params=theta_design, spparams = theta_design,
-                 pred_params = test,
-                 tune=rep(.001,2), tune2=rep(.1,2), 
-                 tune3=1, tune4=rep(.001,2),
-                 niter=500, burnin=500/2,
-                 nugget=0, sigma_z=rep(1,1),
-                 a0z = 1, b0z=1, S=S)
-
+heatmap(W, Rowv = NA, Colv = NA)
+# fullySpatial = spDLMGP(z=t(z)[,-1], y=yin[,-1],
+#                  yy = array(ysp2[,-1,],
+#                             dim=c(nrow(ysp2),ncol(ysp2)-1,dim(ysp2)[3])),
+#                  FF=FF, FFc=FFsp,
+#                  m0=matrix(rep(0,S)), 
+#                  C0=W, W=W,
+#                  yinit = ysp2[1,1,], alpha0=.1, beta0=.1,
+#                  delta_v=.9, delta_w=.9,
+#                  params=theta_design, spparams = theta_design,
+#                  pred_params = test,
+#                  tune=rep(.001,2), tune2=rep(.1,2), 
+#                  tune3=1, tune4=rep(.001,2),
+#                  niter=500, burnin=500/2,
+#                  nugget=0, sigma_z=rep(1,1),
+#                  a0z = 1, b0z=1, S=S)
+print("start")
+print(Sys.time())
+fullySpatial = spSSGP(z=t(z)[,-1], y=yin[,-1],
+                    y_cube = array(ysp2[,-1,],
+                                   dim=c(nrow(ysp2),ncol(ysp2)-1,dim(ysp2)[3])),
+                    FF=FF, FF_cube=FFsp, C0 = W, W = W,
+                    yinit = ysp2[1,1,],
+                    delta_v=.9, delta_w=.9,
+                    params=theta_design,
+                    tune=rep(.001,2), tune2=rep(.1,2),
+                    niter=500, burnin=500/2,
+                    nugget=0)
+print(Sys.time())
+print("end")
 heatmap(apply(fullySpatial$mc_C,1:2,mean), Rowv = NA,Colv = NA)
 matplot(t(fullySpatial$mc_beta),type="l")
 (Sys.time()-st_time)
