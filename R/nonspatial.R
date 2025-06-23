@@ -1,28 +1,18 @@
-# initialize graph
-N = 20
-network_orig=network <- make_tree(N, children = 2,mode = "undirected")
-plot(network)
-l = layout_nicely(network)
-mat=as_adjacency_matrix(network)
-act = sample(c(1:10),size = N,replace = T)
-act = rep(0,N)
-act[1] = 10
-initial_df <- data.frame(node=c(1,2:(N)), activation=act, stringsAsFactors=FALSE)
-a = .01; b = .05; c = 0
-results <- spreadr(mat, initial_df, include_t0 = T,
-                   decay = a, retention = b, suppress = c)
-results$activation=(results$activation+0)
-dat = (reshape(results, idvar = "node", timevar = "time", direction = "wide")[,-1])
-
-S = nrow(dat)
-t_max = 10
-times = (0:t_max)
+# XC modification
+{
+  library(Rcpp)
+  library(RcppArmadillo)
+  library(RcppThread)
+  sourceCpp("cpp models/nonspatialCalibrator.cpp")
+}
 
 FF = array(0, dim=c(S*sims, 1, length(times)-1))
 for(i in 1:dim(FF)[3]){
   l <- split(FF1[,,i], rep(1:ncol(FF1[,,i]), each=nrow(FF1[,,i])))
   FF[,,i] = as.matrix(unlist(l))
 }
+print("start")
+print(Sys.time())
 nonspatial = DLMGP(z=z[-1,], y=yin[,-1],
                yy = array(ysp2[,-1,],
                           dim=c(nrow(ysp2),ncol(ysp2)-1,dim(ysp2)[3])),
@@ -38,7 +28,8 @@ nonspatial = DLMGP(z=z[-1,], y=yin[,-1],
                niter=500, burnin=500/2,
                nugget=0, sigma_z=rep(1,1),
                a0z = 1, b0z=1, S=1, S2=ncol(z))
-
+print(Sys.time())
+print("end")
 (Sys.time()-st_time)
 for(i in 1:ncol(theta_design)){
   matplot((spgasp$mc_beta[i,]),type="l",

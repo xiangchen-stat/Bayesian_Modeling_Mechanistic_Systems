@@ -1,8 +1,9 @@
 {
+print(Sys.time())
 PC <- "mac"
 switch (PC,
         "x1c" = setwd("D:/Documents/UCLA/0-Administrative/GSR/Bayesian-Modeling-Mechanistic-Systems/dev"),
-        "mac" = setwd("/Users/xiangchen/Documents/Bayesian-Modeling-Mechanistic-Systems/dev"),
+        "mac" = setwd("/Users/xiangchen/Documents/GSR/Bayesian-Modeling-Mechanistic-Systems/dev"),
         "xps" = setwd("C:/Users/wilson/Desktop/X1C/MNIW/dev")
 )
 library(readr)
@@ -14,11 +15,11 @@ source("../dev-Dan/generate_grid.R")
 
 p = 2
 # NOTE: Nx is length of x-dimension, or rows, Ny is the length of the y-dimension, or columns.
-Nx <- 6
-Ny <- 6
+Nx <- 100
+Ny <- 100
 N = 10000
-nsims <- 75
-times <- seq(0, 25)
+nsims <- 50
+times <- seq(0, 50)
 
 
 bnrow <- nsims
@@ -250,6 +251,7 @@ if (!file.exists(file.path(train.out.dir, sprintf("%s_%d.csv", train.out.head, m
 #         #             row.names=FALSE)
 #     }
 }
+print(Sys.time())
 }
 
 #gen_SIR_data(nsims, e1, e2, a1, a2, a3, yini,

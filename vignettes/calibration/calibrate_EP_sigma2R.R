@@ -254,7 +254,7 @@ max_y <- max(as.vector(unlist(dt_pde_test)))
 # plot_heat_u <- plot_panel_heatmap_9_cal(dat = df_gen$u, tstamp = tstamp, max_y = max_y,
 #                                      loc_cal = loc_cal, Nx = Nx, Ny = Ny, filename = "plot_heat_u_")
 
-# split to train and test
+
 prop_train_cal <- 1
 N_sp_train <- round(N_sp_cal * prop_train_cal)
 N_sp_test <- N_sp_cal - N_sp_train
@@ -376,6 +376,11 @@ n <- 1; i <- 1
 }
 
 # Metropolis----
+{
+time_start <- Sys.time()
+print("Start Metropolis")
+print(time_start)
+
 for (n in 1:(n_burn + n_iter)) {
   if (n %% max(min(1000, round((n_burn + n_iter)*0.05)), 1) == 0) {
     print(paste("iteration", n, "/", (n_burn + n_iter)))
@@ -608,6 +613,21 @@ for (n in 1:(n_burn + n_iter)) {
   }
 }
 
+time_end <- Sys.time()
+print("End Metropolis")
+print(time_end)
+print("Time Metropolis")
+print(time_end - time_start)
+}
+
+if(FALSE){
+  save(mcmc_accept, file = "mcmc_accept.RData")
+  save(mcmc_eta, file = "mcmc_eta.RData")
+  save(mcmc_tau2, file = "mcmc_tau2.RData")
+  save(mcmc_u, file = "mcmc_u.RData")
+  save(mcmc_y, file = "mcmc_y.RData")
+  save(mcmc_z, file = "mcmc_z.RData")
+}
 
 # check----
 {

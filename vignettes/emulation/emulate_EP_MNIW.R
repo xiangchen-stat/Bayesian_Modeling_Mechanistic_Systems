@@ -18,13 +18,13 @@ if (!dir.exists(path_fig)) {
 ind_old_data <- F
 AR_choice <- 2
 nsam <- 10
-n_input <- 20
+n_input <- 50
 nT <- 51
 nT_ori <- nT
 Nx <- 100
 Ny <- 100
 N_people <- 10000
-prop_train <- 0.5
+prop_train <- 0.8
 gp_tune <- 0.5
 gp_sigma2 <- 1.1
 gp_tau2 <- 10^(-4)
@@ -164,24 +164,30 @@ gc()
 ## FFBS----
 {
 time_start <- Sys.time()
-time_start
+print("Start FFBS")
+print(time_start)
 para_ffbs <- FFBS(Y = Y, F_ls = F_ls, G_ls = G_ls,
                   W_ls = W_ls, V_ls = V_ls,
                   m0 = m0, M0 = M0,
                   n0 = n0, D0 = D0,
                   nT = nT, delta = 1.0)
 time_end <- Sys.time()
-time_end
+print("End FFBS")
+print(time_end)
+print("Time FFBS")
 print(time_end - time_start)
 
 # sampling
 time_start <- Sys.time()
-time_start
+print("Start sampling")
+print(time_start)
 res_ffbs <- FFBS_sampling(nsam = nsam, para_ffbs = para_ffbs, 
                           F_ls = F_ls, G_ls = G_ls,
                           nT = nT, delta = 1)
 time_end <- Sys.time()
-time_end
+print("End sampling")
+print(time_end)
+print("Time sampling")
 print(time_end - time_start)
 # save(res_ffbs, file = file.path(paste(path_data, "/res_ffbs_10by10_fixBSbug.RData", sep = "")))
 # load(file.path(paste(path_data, "/res_ffbs_10by10_fixBSbug.RData", sep = "")))
@@ -223,7 +229,7 @@ source(here("R", "func_plot.R"))
   # ind_sp <- data.frame(row = rep(1:Ny, times = Nx), col = rep(1:Nx, each = Ny))
   # plot_ls <- list() 
   # tstamp <- as.integer(seq(1, nT, length.out = 9))
-  input_num <- 1
+  input_num <- 2
   tstamp <- as.integer(seq(1, nT_ori, length.out = 9))
   dat <- dt_pde_test
   max_y <- max(as.vector(unlist(dat))) # set max limit for all plots
@@ -453,12 +459,12 @@ source(here("R", "func_plot.R"))
   ind_old_data <- F
   AR_choice <- 2
   nsam <- 10
-  n_input <- 20
+  n_input <- 50
   nT <- 51
   Nx <- 100
   Ny <- 100
   N_people <- 10000
-  prop_train <- 0.5
+  prop_train <- 0.8
   N_sp <- Nx * Ny
   n_train <- round(n_input * prop_train)
   n_test <- n_input - n_train
@@ -877,7 +883,7 @@ source(here("R", "func_plot.R"))
 
 # Summary tables
 {
-  tbl_time[, 3] <- tbl_time[, 1] + tbl_time[, 2]   
+  tbl_time[, 3] <- tbl_time[, 1] + tbl_time[, 2]   # TODO:adjust minutes to seconds
   
   tbl_man <- cbind(c(lppd_mniw, lppd_mnig, lppd_i), c(pwaic_mniw, pwaic_mnig, pwaic_i))
   colnames(tbl_man) <- c("lppd", "pwaic")
@@ -897,7 +903,7 @@ source(here("R", "func_plot.R"))
   
   tbl_out <- matrix(nrow = 3, ncol = 10)
   rownames(tbl_out) <- c("MNIW", "MNIG", "I")
-  colnames(tbl_out) <- c("lppd", "lppd_ana", "WAIC", "G", "P", "D", "Time", "t_FFBS", "t_Sampling","t_WAIC")
+  colnames(tbl_out) <- c("lppd", "lppd_ana", "WAIC", "G", "P", "D", "Discard", "t_FFBS", "t_Sampling","t_WAIC")
   tbl_out[, c(1:2)] <- tbl_lppd[, c(1:2)]
   tbl_out[, 3] <- tbl_waic[, 1]
   tbl_out[, 4:6] <- tbl_gpd
