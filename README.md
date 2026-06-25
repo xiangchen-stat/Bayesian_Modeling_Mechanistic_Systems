@@ -1,6 +1,6 @@
 # Bayesian Modeling of Mechanistic Systems
 
-This repository contains the code to reproduce the results presented in the paper *Dynamic Bayesian Learning for Spatiotemporal Mechanistic Models*.
+This repository contains the code to reproduce the results presented in the paper *Dynamic Bayesian Learning for Spatiotemporal Mechanistic Models*. The associated R package, **spDBL**, is available at https://github.com/xiangchen-stat/spDBL.
 
 ### Repository Structure
 
