@@ -1,0 +1,189 @@
+---
+title: "Reproducing the 100 × 100 emulation experiment with spDBL"
+params:
+  render_only: false
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+  fig.width = 12, fig.height = 5, dpi = 130)
+source("reproduction_helpers.R")
+source("reproduction_plots.R")
+root <- reproduction_setup()
+```
+
+This is a package-based rerun of `vignettes/reproduce/emulate_EP_MNIW.R`.
+It uses **all 50 original saved simulator runs**, the original 100 × 100 grid,
+and all 51 time points. The first 40 inputs train the model; inputs 41–50
+are held out. No spatial or temporal subsampling is used. The saved values
+are already on the $\log(I+1)$ scale.
+
+The first experiment reconstructs the inverse-Wishart emulator's heat maps
+and prediction comparisons. The second compares the **MNIW, MNIG, and identity**
+right-covariance models using episode-level log predictive density, WAIC,
+and the development script's G/P/D calculation.
+
+These research reports use the repository's `data/` directory. They live outside
+the spDBL package source; ordinary package builds do not include them or the
+large original CSV datasets.
+
+## Match the original setup
+
+| Setting | Original script and this run |
+|:--|:--|
+| Simulator inputs | Original `data/emulation/pde_para.csv`, rows 1–50 |
+| Training / validation | Rows 1–40 / 41–50 |
+| Grid and time | 100 × 100; times 0–50 |
+| AR design | AR2; the original special initialization at the first two times |
+| Block size | One 100-cell strip; 100 blocks per time |
+| Episode count | 5,100 |
+| Coefficient matrix | 200 × 100 |
+| Kernel | Exponential, tuning 0.5, amplitude 1.1, nugget 0.0001 |
+| State prior | All-one mean, identity left covariance, $G=W=I$ |
+| Covariance priors | MNIW: $n_0=203,D_0=I_{100}$; MNIG: $n_0=203,D_0=300$ |
+| Sampling | Ten smoothed-marginal coefficient sets; seed 1234 |
+
+The large-grid experiment calls exported `spDBL::FFBS()`,
+`FFBS_sampling()`, and `FFBS_predict_exact()` directly. This retains the original
+episode calculations without allocating an unused full-grid 10,000 × 10,000
+covariance matrix. The scalar and identity comparisons use `FFBS_sigma2R()`
+and `FFBS_I()` respectively. The shared helper reads the CSVs without modifying
+them and records their MD5 checksums.
+
+```{r core-api, eval=FALSE}
+# d contains the original CSV responses, rearranged to time-indexed matrices.
+# s contains their original block indices, AR2 rows, and kernels.
+fit <- spDBL::FFBS(
+  Y = s$Y, F_ls = s$F, G_ls = diag(s$P), W_ls = diag(s$P),
+  V_ls = s$V, m0 = matrix(1, s$P, s$C), M0 = diag(s$P),
+  n0 = s$P + 3, D0 = diag(s$C), nT = s$E, delta = 1
+)
+draws <- spDBL::FFBS_sampling(
+  10, fit, s$F, diag(s$P), s$E, sampling = "marginal"
+)
+prediction_EP <- spDBL::FFBS_predict_exact(
+  s$Y, fit, s$F, s$F_test, d$input[1:40, ], d$input[41:50, ],
+  s$E, s$phi
+)
+prediction <- spDBL::recover_from_EP_exact(
+  prediction_EP, d$T, s$E, s$block_cols
+)
+```
+
+## Run or reuse verified experiment results
+
+The following call runs the full experiment on first execution. Each completed
+model is saved independently, so an interrupted model-comparison run can resume
+without refitting completed models. A changed input checksum, numerical helper
+implementation, configuration, or package version invalidates the cache and produces an
+error instead of silently showing stale results.
+
+```{r experiment}
+r <- if (isTRUE(params$render_only)) reproduction_cached_results(root, "emulation") else
+  run_emulation_reproduction(root)
+r$manifest$settings
+```
+
+## Held-out prediction
+
+```{r heldout-table}
+knitr::kable(r$models$MNIW$validation, digits = 6,
+  caption = "Errors on the saved log(I + 1) scale; all sites and times.")
+```
+
+Pooling all held-out cells gives RMSE
+**`r format(sqrt(mean(r$models$MNIW$validation$RMSE^2)), digits = 5)`**.
+
+```{r figures, include=FALSE}
+figure_dir <- file.path(reproduction_results_directory("emulation"), "figures")
+plots <- plot_emulation_reproduction(r, figure_dir)
+```
+
+These figures use the original blue–green–red palette from `R/func_plot.R`,
+colour limits from zero to the maximum across all ten held-out trajectories,
+the original panel arrangements and labels, and legends on the right.
+The error panels use black points and error bars with alpha `0.1 / 3`, a red
+identity line, and the original division by population 10,000. The minimal
+theme, font sizes, figure dimensions, and export resolutions match the source
+script. Numerical emulation results are reused without refitting.
+
+```{r heatmap, echo=FALSE, out.width="100%", fig.cap="The original comparison: held-out input 42, at times 18, 31, and 43."}
+knitr::include_graphics(file.path(figure_dir, "heat_compare.png"))
+```
+
+```{r prediction-panel, echo=FALSE, out.width="100%", fig.cap="Original plotting scale: saved log(I + 1) responses divided by population 10,000. Intervals summarize coefficient-conditioned means."}
+knitr::include_graphics(file.path(figure_dir, "error_compare.png"))
+```
+
+As in the original script, these AR2 prediction rows are constructed using the
+**held-out simulator trajectories themselves**. This evaluates emulation
+conditional on saved lag features; it is not a PDE-free forecast at an input
+with no trajectory available. The calibration vignette separately evaluates
+the offline GP that supplies these rows without a PDE solution.
+
+The ten-draw intervals above summarize variation of conditional means.
+They omit new-input GP residual variation and are not full predictive intervals.
+The package's current marginal sampler has the same marginal target as the
+original sampler, but its random-number implementation can give different
+individual draws.
+
+## Three covariance models
+
+For each episode $e$, retain the original matrix-valued likelihood unit:
+
+$$
+\ell_e=\log\left\{\frac1M\sum_{m=1}^M p(Y_e\mid\Theta_e^{(m)},\Sigma^{(m)})\right\},
+\qquad p_e=\operatorname{Var}_{m=1,\ldots,M}\left[\log p(Y_e\mid\Theta_e^{(m)},\Sigma^{(m)})\right],
+$$
+
+$$\operatorname{WAIC}=-2\sum_e(\ell_e-p_e).$$
+
+The likelihood is matrix normal with row covariance $V$ and right covariance
+$\Sigma^{(m)}$, $\sigma_m^2 R$, or $I$. The helper caches Cholesky factors and
+checks its optimized density against `mniw::dMNorm()` before computing scores.
+Analytic densities use the package's exported `lppd_*_1t()` functions and the
+terminal covariance posterior, as in the original script.
+
+```{r model-table}
+knitr::kable(r$comparison[, c("model", "lppd", "lppd_analytic", "p_waic", "WAIC")],
+  digits = 3, caption = "Full-data covariance comparison.")
+knitr::kable(r$comparison[, c("model", "G", "P", "D")], digits = 3,
+  caption = "G/P/D formulas preserved from the development script.")
+knitr::kable(r$comparison[, c("model", "FFBS_seconds", "sampling_seconds", "scoring_seconds")],
+  digits = 1, caption = "Elapsed time by stage, in seconds.")
+```
+
+```{r comparison-panel, echo=FALSE, out.width="100%"}
+knitr::include_graphics(file.path(figure_dir, "model_comparison.png"))
+```
+
+`G`, `P`, and `D=G+P` intentionally reproduce the development script's
+formulas, including its `trace(St)` penalty and MNIW divisor `nt - 2`.
+They should be read as a reproduction of that implementation, rather than a
+new derivation of posterior predictive loss. WAIC uses sample variance across
+ten draws; such a small Monte Carlo sample can be unstable. Analytic lppd and
+Monte Carlo lppd are shown separately rather than assumed numerically equal.
+
+## Re-run
+
+From the repository root:
+
+```sh
+R CMD INSTALL --library=spDBL/.r-library spDBL
+Rscript vignettes/reproduce_spDBL/run_reproduction.R emulation
+```
+
+The HTML is self-contained. Numerical summaries, full held-out means, selected
+MC arrays, CSV tables, input checksums, and session information are saved under
+`vignettes/reproduce_spDBL/_results/emulation/`. To intentionally change the
+setup or implementation, move this result directory aside first and run again.
+
+```{r session}
+sessionInfo()
+```

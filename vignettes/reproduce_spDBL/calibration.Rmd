@@ -1,0 +1,273 @@
+---
+title: "Reproducing the 6 × 6 calibration experiment with spDBL"
+params:
+  profile: quick
+  render_only: false
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = TRUE,
+  fig.width = 13, fig.height = 4, dpi = 130)
+source("reproduction_helpers.R")
+source("reproduction_plots.R")
+root <- reproduction_setup()
+profile <- match.arg(params$profile, c("full", "quick"))
+n_emulator <- calibration_reproduction_settings(profile)$nsam
+```
+
+This reruns the data setup and plots in
+`vignettes/reproduce/calibrate_EP_sigma2R.R` using the installed spDBL package.
+It fits the emulator to the same 40 original simulator runs, assesses all ten
+held-out runs, generates the original synthetic-field experiment on 36 sites
+and 26 times, and calibrates **eta1, eta2, and alpha2**, with **alpha1 = alpha3 = 0**.
+
+The full experiment uses **30,000 emulator draws** (`nsam <- 3 * 10^4`).
+This rendered report uses the **`r profile` profile** with
+**`r format(n_emulator, big.mark = ",", scientific = FALSE)` draws**.
+The quick profile has 300 draws. Each profile uses one calibration transition
+per draw and saves its results separately. Rendering this source directly
+defaults to quick; the command-line runner defaults to full.
+
+The inference step uses the current package workflow:
+`emulator_learn()` → `calibration_prepare()` → `calibration_fit()` →
+`calibration_predict()`. The custom Metropolis/Gibbs updates in the development
+script are replaced by Stan, and GP means replace PDE evaluations during
+calibration. This is an approximate reproduction using the package method,
+not a bit-for-bit rerun of the old inference algorithm.
+
+## Original data and settings
+
+| Setting | Reproduction |
+|:--|:--|
+| CSV inputs | `data/calibration/pde_para.csv` and all 50 `pde_solution_*.csv` |
+| Training / validation | Original rows 1–40 / 41–50 |
+| Grid and time | 6 × 6; times 0–25 |
+| Episode blocks | Two strips per block, 12 sites, three blocks per time |
+| Emulator | Scalar $\sigma^2R$, AR2, 78 episodes, 24 × 12 coefficients |
+| Kernel | Exponential, tuning 0.5, amplitude 1.1, nugget 0.0001 |
+| Emulator prior | $n_0=27,D_0=36$, all-one coefficient mean, identity left covariance |
+| Emulator draws | `r format(n_emulator, big.mark = ",", scientific = FALSE)` smoothed-marginal coefficient sets |
+| Field truth | Input 50: $(3,0.3,0,0.1,0)$; saved log(I + 1) trajectory |
+| Synthetic discrepancy | $u_0=0$, $\tau_t^2\sim\mathrm{IG}(30,2)$, random-walk increments |
+| Field covariance | Original full-grid kernel, diagonal 1.1001, without normalization |
+| Calibration priors | $n_0=30,d_0=2,b=1,m_0=0,M_0=I$ |
+| Estimated parameter bounds | eta1: $[2,4]$; eta2: $[0.2,0.4]$; alpha2: $[0,0.2]$ |
+| Fixed parameters | alpha1 = alpha3 = 0 |
+| Observation sites | All 36, using the original random permutation |
+| Current calibration controls | One chain, one transition per draw, zero warmup |
+
+`alpha1` and `alpha3` are zero in every original training input. They are fixed
+at zero by giving them equal lower and upper bounds. Stan samples only the
+three active parameters. Saved mechanistic-parameter arrays retain all five
+columns for compatibility, with the two fixed columns identically zero.
+This restriction replaces the five-free-parameter setup in the development
+script; the data, emulator draws, and remaining settings are preserved.
+
+## End-to-end experiment
+
+The helper builds both the training and held-out AR2 rows before sampling,
+following the original seed-1234 sequence. It checks the RNG state against an
+explicit replay of the original gamma and normal draw counts before generating
+the synthetic field with `gen_calibrate_data()`. GP mean prediction consumes
+no random numbers. The truth trajectory is read from saved input 50, so this
+reproduction calls no PDE solver.
+
+As in the development script, synthetic-field generation follows coefficient
+sampling in the same RNG stream. The 30,000-draw full profile therefore generates
+a different synthetic field realization from the 300-draw quick profile,
+using the same saved truth trajectory, covariance, and generative model.
+
+For the completed quick profile, an independent check also executed the original development sampler against
+the same package filtering results. It reproduced the generated `z`, `u`,
+`tau2`, and the observation-site permutation exactly; its check log is retained
+with the calibration outputs.
+
+The former unit-diagonal restriction on `calibration_fit(U=...)` has been
+relaxed to accept a symmetric positive-definite covariance scale. This preserves
+the original ratio between discrepancy and observation variance:
+
+$$
+u_t\mid u_{t-1},\tau_t^2\sim N(u_{t-1},\tau_t^2 U),\qquad
+z_t\mid y_t,u_t,\tau_t^2\sim N(y_t+u_t,\tau_t^2 I).
+$$
+
+```{r experiment}
+r <- if (isTRUE(params$render_only)) reproduction_cached_results(root, "calibration", profile) else
+  run_calibration_reproduction(root, profile = profile)
+r$manifest$settings
+```
+
+The main API calls inside the helper are:
+
+```{r core-api, eval=FALSE}
+# s$F and s$F_test are constructed in the original RNG order.
+em <- spDBL::emulator_learn(
+  d$input[1:40, ], d$train, 6, 6, F_ls_train = s$F,
+  covariance = "sigma2R", episode_window = 2,
+  nsam = n_emulator, sampling = "marginal", seed = NULL
+)
+cal <- spDBL::calibration_prepare(
+  em, lower = c(2, 0.2, 0, 0, 0), upper = c(4, 0.4, 0, 0.2, 0)
+)
+fit <- spDBL::calibration_fit(
+  cal, z = field$z[, field$locations], U = field$U,
+  locations = field$locations, seed = 12345678,
+  iter = 1, warmup = 0, chains = 1, draws_per_emulator = 1,
+  n0 = 30, d0 = 2, discount = 1
+)
+prediction <- spDBL::calibration_predict(fit, seed = 12345679)
+```
+
+For a fixed emulator draw, the package combines an offline GP prediction of
+the AR2 rows with conditional GP residual interpolation. Schematically,
+
+$$
+\mu_e(\eta)=\widehat F_e(\eta)\Theta_e+
+J(\eta)^\top V^{-1}(Y_e-F_e\Theta_e),
+$$
+
+$$
+\Sigma(\eta)=\sigma^2\left\{1.1001-J(\eta)^\top V^{-1}J(\eta)\right\}R_{\rm field}.
+$$
+
+The diagonal input nugget is not added to cross-covariances between independent
+simulator runs. The offline AR2 GP is used through its fitted mean; uncertainty
+in those fitted design rows is omitted. Stan integrates out emulator fields
+and discrepancy trajectories with the marginal likelihood, then the package
+recovers latent trajectories conditionally on the observations.
+
+## Check the GP approximation on the same held-out inputs
+
+```{r validation}
+knitr::kable(r$validation, digits = 5,
+  caption = "All 26 times and 36 sites, on the saved log(I + 1) scale.")
+```
+
+The saved-lag baseline uses the original held-out AR2 features. The offline
+method predicts those features from parameter inputs alone. These two checks
+separate ordinary emulator interpolation from the additional approximation
+needed for PDE-free calibration. The field truth run is held out from training.
+
+## Three estimated parameter histograms
+
+```{r eta-table}
+knitr::kable(r$eta[r$eta$parameter %in% r$active_parameters, ], digits = 6,
+  caption = paste("Descriptive quantiles across", format(n_emulator, big.mark = ","),
+    "one-transition conditional runs."))
+knitr::kable(data.frame(parameter = names(r$fixed_parameters),
+  fixed_value = unname(r$fixed_parameters)), caption = "Parameters fixed during calibration.")
+```
+
+```{r figures, include=FALSE}
+figure_dir <- file.path(reproduction_results_directory("calibration", profile), "figures")
+plots <- plot_calibration_reproduction(r, figure_dir)
+```
+
+```{r eta-panel, echo=FALSE, out.width="100%"}
+knitr::include_graphics(file.path(figure_dir, "eta_histograms.png"))
+```
+
+The histograms follow the original orange, light-green, and light-yellow
+fills for eta1, eta2, and eta4 (alpha2), with black outlines. Red marks the
+generating value; solid black marks the median and dashed black marks the
+2.5% and 97.5% quantiles. The prior-range axis limits, minimal theme, font
+sizes, and 45 × 15 cm export at 300 dpi match the development script.
+
+## Latent-field heat-map panel
+
+```{r heat-y-panel, echo=FALSE, out.width="100%", fig.cap="Original 3 × 3 layout at times 3, 12, and 21. Rows show the saved simulator truth, GP mean at the componentwise 2.5% parameter vector, and GP mean at the componentwise 97.5% vector."}
+knitr::include_graphics(file.path(figure_dir, "plot_heat_y_panel.png"))
+```
+
+This is `plot_heat_y_panel` from the original experiment, using GP evaluations
+in place of the two PDE evaluations. The original blue–green–red palette,
+shared colour limits, labels, right-side legend, and 40 × 35 cm export at
+300 dpi are retained. The lower and upper rows evaluate two parameter
+settings; they are **not** pointwise 95% credible bounds for the field.
+Both zero-valued parameters remain fixed at zero in these vectors.
+
+## Variance, discrepancy, and field panel
+
+```{r recovery-panel, echo=FALSE, out.width="100%", fig.cap="Original colours: light-blue ribbons (#A6CEE3), blue estimates (#1F78B4), and red truth or identity lines (#E31A1C). The field panel compares recovered replicated observations with the observed synthetic field."}
+knitr::include_graphics(file.path(figure_dir, "tau2_u_z_panel.png"))
+```
+
+```{r recovery-table}
+knitr::kable(r$scores, digits = 5,
+  caption = "In-sample recovery summaries. interval_fraction is descriptive, not a calibrated coverage estimate.")
+```
+
+The field and discrepancy comparisons use every observed site and time, with
+the spatial permutation explicitly aligned. Recovery conditions on the same
+field observations; it is not an out-of-sample prediction assessment. The
+replicated field adds fresh observation noise.
+
+## Interpret the differences
+
+The original full script moves a single Metropolis/Gibbs state through 30,000
+emulator draws, without burn-in, starting at $(2.7,0.32,0,0.07,0)$. The package starts
+each fixed-emulator conditional Stan run at the midpoint of its parameter bounds:
+$(3,0.3,0,0.1,0)$, preserving the two fixed zero values. Its default zero-warmup
+transition uses stepsize 0.001. The original sampler estimates five parameters;
+this run estimates three. The initializations, transition kernels, and number
+of free parameters differ from the original inference script.
+
+**One transition per emulator draw does not establish posterior convergence.**
+Narrow histograms can reflect initialization. No R-hat or effective-sample-size claim is
+made from these runs. A statistical reproduction of posterior parameter
+uncertainty requires warmup, many transitions per conditional, and diagnostics;
+the current run preserves the requested package default execution setup.
+
+The current code also uses each emulator draw's own variance and a
+kernel-consistent conditional variance. The development calibration helpers
+instead use a variance averaged across draws and a unit-amplitude conditional
+variance. These are additional reasons not to expect identical old histograms.
+
+```{r diagnostics}
+knitr::kable(data.frame(
+  conditional_runs = length(r$diagnostics),
+  divergences = sum(vapply(r$diagnostics, `[[`, numeric(1), "divergences")),
+  treedepth_hits = sum(vapply(r$diagnostics, `[[`, numeric(1), "max_treedepth_hits")),
+  execution_only = r$execution_only
+))
+if (all(is.finite(r$timing$seconds))) knitr::kable(r$timing, digits = 1)
+```
+
+The completed run has **`r sum(vapply(r$diagnostics, function(d) d$divergences, numeric(1)))`
+divergences** and **`r sum(vapply(r$diagnostics, function(d) d$max_treedepth_hits, numeric(1)))`
+maximum-treedepth hits**. The one-transition setup still requires longer,
+adapted runs when assessing posterior inference.
+
+## Re-run and inspect saved objects
+
+From the repository root:
+
+```sh
+R CMD INSTALL --library=spDBL/.r-library spDBL
+Rscript vignettes/reproduce_spDBL/run_reproduction.R calibration full --dry-run
+Rscript vignettes/reproduce_spDBL/run_reproduction.R calibration full
+# Existing 300-draw quick report:
+Rscript vignettes/reproduce_spDBL/run_reproduction.R calibration quick
+```
+
+The self-contained HTML is saved next to this source as `calibration-full.html`
+for the full profile or `calibration.html` for quick. `_results/calibration-full/`
+(full) and `_results/calibration/` (quick)
+contain the generated field, full serializable fit and recovery arrays,
+all conditional checkpoints, CSV summaries, figures, input checksums,
+and session information. After loading `calibration.rds`, longer conditional
+runs can reuse `fit$emulator`, `fit$field$z`, `fit$field$U`, and
+`fit$field$locations`; the emulator need not be fitted again.
+
+These repository-specific reports live outside the spDBL package source and
+use external CSV data, so ordinary package builds do not include them.
+
+```{r session}
+sessionInfo()
+```

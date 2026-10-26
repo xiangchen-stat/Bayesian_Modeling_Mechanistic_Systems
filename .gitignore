@@ -20,6 +20,10 @@
 # Output files from R CMD check
 /*.Rcheck/
 
+# Reproduction archives and generated results
+_archive/
+_results/
+
 # RStudio files
 .Rproj.user/
 
